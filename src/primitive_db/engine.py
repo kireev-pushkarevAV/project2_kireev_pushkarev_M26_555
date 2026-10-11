@@ -1,87 +1,231 @@
-import shlex
+import re
 
-import prompt
+from prettytable import PrettyTable
 
-from primitive_db.core import create_table, drop_table, list_tables
-from primitive_db.utils import load_metadata, save_metadata
+from primitive_db.core import (
+    create_table,
+    delete,
+    drop_table,
+    insert,
+    list_tables,
+    select,
+    update,
+)
+from primitive_db.parser import parse_condition, parse_values_clause
+from primitive_db.utils import (
+    load_metadata,
+    load_table_data,
+    save_metadata,
+    save_table_data,
+)
 
 
 def print_help() -> None:
-    """Выводит справочную информацию."""
-    print("\n***Процесс работы с таблицей***")
+    
+    print("\n***Операции с данными***\n")
     print("Функции:")
     print(
-        "<command> create_table <имя_таблицы> <столбец1:тип> "
-        "<столбец2:тип> .. - создать таблицу"
+        "<command> insert into <имя_таблицы> values (<значение1>, "
+        "<значение2>, ...) - создать запись."
     )
-    print("<command> list_tables - показать список всех таблиц")
-    print("<command> drop_table <имя_таблицы> - удалить таблицу")
-    print("<command> exit - выход из программы")
-    print("<command> help - справочная информация\n")
+    print(
+        "<command> select from <имя_таблицы> where <столбец> = <значение> "
+        "- прочитать записи по условию."
+    )
+    print("<command> select from <имя_таблицы> - прочитать все записи.")
+    print(
+        "<command> update <имя_таблицы> set <столбец1> = <новое_значение1> "
+        "where <столбец_условия> = <значение_условия> - обновить запись."
+    )
+    print(
+        "<command> delete from <имя_таблицы> where <столбец> = <значение> "
+        "- удалить запись."
+    )
+    print("<command> info <имя_таблицы> - вывести информацию о таблице.")
+    print("<command> exit выход из программы")
+    print("<command> help справочная информация\n")
+
+
+def display_table(
+    schema: list[dict[str, str]], rows: list[dict[str, str]]
+) -> None:
+
+    field_names = [col["name"] for col in schema]
+    pt = PrettyTable()
+    pt.field_names = field_names
+    for row in rows:
+        pt.add_row([row.get(f) for f in field_names])
+    print(pt)
 
 
 def run() -> None:
-    """Главный интерактивный цикл управления таблицами."""
+
+    metadata = load_metadata()
     print_help()
 
     while True:
         try:
-            user_input = prompt.string(">>>Введите команду: ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print("\nВыход из программы.")
+            user_input = input(">>> Введите команду: ").strip()
+        except (EOFError, KeyboardInterrupt):
             break
 
         if not user_input:
             continue
 
-        try:
-            tokens = shlex.split(user_input)
-        except ValueError as err:
-            print(f"Ошибка парсинга команды: {err}")
+        if user_input.lower() in ("exit", "exitвыход из программы"):
+            break
+
+        if user_input.lower() in ("help", "helpсправочная информация"):
+            print_help()
             continue
 
-        command = tokens[0]
-        args = tokens[1:]
+       
+        if user_input.startswith("create_table "):
+            parts = user_input.split()
+            if len(parts) < 3:
+                print("Ошибка: укажите имя таблицы и хотя бы один столбец.")
+                continue
+            t_name = parts[1]
+            cols = parts[2:]
+            ok, msg = create_table(metadata, t_name, cols)
+            if ok:
+                save_metadata(metadata)
+            print(msg)
+            continue
 
-        metadata = load_metadata()
+        if user_input == "list_tables":
+            print(list_tables(metadata))
+            continue
 
-        match command:
-            case "exit":
-                break
+        if user_input.startswith("drop_table "):
+            parts = user_input.split()
+            if len(parts) < 2:
+                print("Ошибка: укажите имя таблицы.")
+                continue
+            ok, msg = drop_table(metadata, parts[1])
+            if ok:
+                save_metadata(metadata)
+            print(msg)
+            continue
 
-            case "help":
-                print_help()
+        
+        if user_input.startswith("info "):
+            t_name = user_input.split(maxsplit=1)[1].strip()
+            if t_name not in metadata:
+                print(f'Ошибка: Таблица "{t_name}" не существует.')
+                continue
+            data = load_table_data(t_name)
+            schema = metadata[t_name]
+            cols_str = ", ".join(f"{c['name']}:{c['type']}" for c in schema)
+            print(f"Таблица: {t_name}")
+            print(f"Столбцы: {cols_str}")
+            print(f"Количество записей: {len(data)}")
+            continue
 
-            case "create_table":
-                if len(args) < 1:
-                    print(
-                        "Некорректное значение: пропущено имя таблицы. "
-                        "Попробуйте снова."
-                    )
+        
+        insert_match = re.match(
+            r"^insert\s+into\s+(\w+)\s+values\s*(\(.*\))$",
+            user_input,
+            re.IGNORECASE,
+        )
+        if insert_match:
+            t_name = insert_match.group(1)
+            raw_vals = insert_match.group(2)
+            vals = parse_values_clause(raw_vals)
+            t_data = load_table_data(t_name)
+            ok, msg, _ = insert(metadata, t_name, vals, t_data)
+            if ok:
+                save_table_data(t_name, t_data)
+            print(msg)
+            continue
+
+        
+        select_match = re.match(
+            r"^select\s+from\s+(\w+)(?:\s+where\s+(.+))?$",
+            user_input,
+            re.IGNORECASE,
+        )
+        if select_match:
+            t_name = select_match.group(1)
+            where_raw = select_match.group(2)
+            if t_name not in metadata:
+                print(f'Ошибка: Таблица "{t_name}" не существует.')
+                continue
+            t_data = load_table_data(t_name)
+            where_clause = None
+            if where_raw:
+                try:
+                    where_clause = parse_condition(where_raw)
+                except ValueError as err:
+                    print(err)
                     continue
-                table_name = args[0]
-                raw_columns = args[1:]
-                old_tables_count = len(metadata)
-                metadata = create_table(metadata, table_name, raw_columns)
-                if len(metadata) > old_tables_count:
-                    save_metadata(metadata)
+            filtered = select(t_data, where_clause)
+            display_table(metadata[t_name], filtered)
+            continue
 
-            case "drop_table":
-                if len(args) != 1:
-                    print(
-                        "Некорректное значение: укажите имя таблицы. "
-                        "Попробуйте снова."
-                    )
-                    continue
-                table_name = args[0]
-                if table_name in metadata:
-                    metadata = drop_table(metadata, table_name)
-                    save_metadata(metadata)
-                else:
-                    drop_table(metadata, table_name)
+       
+        update_match = re.match(
+            r"^update\s+(\w+)\s+set\s+(.+?)\s+where\s+(.+)$",
+            user_input,
+            re.IGNORECASE,
+        )
+        if update_match:
+            t_name = update_match.group(1)
+            set_raw = update_match.group(2)
+            where_raw = update_match.group(3)
+            if t_name not in metadata:
+                print(f'Ошибка: Таблица "{t_name}" не существует.')
+                continue
+            try:
+                set_clause = parse_condition(set_raw)
+                where_clause = parse_condition(where_raw)
+            except ValueError as err:
+                print(err)
+                continue
+            t_data = load_table_data(t_name)
+            count, ids = update(t_data, set_clause, where_clause)
+            if count > 0:
+                save_table_data(t_name, t_data)
+                ids_str = ", ".join(str(i) for i in ids)
+                print(
+                    f'Запись с ID={ids_str} в таблице "{t_name}" '
+                    "успешно обновлена."
+                )
+            else:
+                print("Записи для обновления не найдены.")
+            continue
 
-            case "list_tables":
-                list_tables(metadata)
 
-            case _:
-                print(f"Функции {command} нет. Попробуйте снова.")
+        del_match = re.match(
+            r"^delete\s+from\s+(\w+)\s+where\s+(.+)$",
+            user_input,
+            re.IGNORECASE,
+        )
+        if del_match:
+            t_name = del_match.group(1)
+            where_raw = del_match.group(2)
+            if t_name not in metadata:
+                print(f'Ошибка: Таблица "{t_name}" не существует.')
+                continue
+            try:
+                where_clause = parse_condition(where_raw)
+            except ValueError as err:
+                print(err)
+                continue
+            t_data = load_table_data(t_name)
+            new_data, del_ids = delete(t_data, where_clause)
+            if del_ids:
+                save_table_data(t_name, new_data)
+                ids_str = ", ".join(str(i) for i in del_ids)
+                print(
+                    f'Запись с ID={ids_str} успешно удалена из таблицы "{t_name}".'
+                )
+            else:
+                print("Записи для удаления не найдены.")
+            continue
+
+        print(f"Неизвестная команда: {user_input}")
+
+
+if __name__ == "__main__":
+    run()
