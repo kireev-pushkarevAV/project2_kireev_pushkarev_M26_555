@@ -18,3 +18,7 @@ create_table users name:str age:int is_active:bool
 list_tables
 drop_table users
 exit
+
+### Демонстрация работы
+
+[![asciicast](https://asciinema.org/a/EEjnzgAIdLhoyOyG.svg)](https://asciinema.org/a/EEjnzgAIdLhoyOyG)
