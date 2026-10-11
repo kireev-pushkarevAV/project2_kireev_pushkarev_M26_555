@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 *.egg-info/
 *.cast
+asciinema.exe
+db_meta.json
+data/
