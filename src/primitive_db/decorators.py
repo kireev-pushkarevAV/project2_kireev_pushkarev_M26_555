@@ -2,8 +2,11 @@ import time
 from functools import wraps
 from typing import Any, Callable
 
+from primitive_db.constants import CONFIRM_YES
+
 
 def handle_db_errors(func: Callable[..., Any]) -> Callable[..., Any]:
+
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
@@ -25,6 +28,7 @@ def handle_db_errors(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def confirm_action(action_name: str) -> Callable[..., Any]:
+
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -32,7 +36,7 @@ def confirm_action(action_name: str) -> Callable[..., Any]:
                 f'Вы уверены, что хотите выполнить "{action_name}"? [y/n]: '
             )
             answer = input(prompt).strip().lower()
-            if answer != "y":
+            if answer != CONFIRM_YES:
                 print(f'Операция "{action_name}" отменена.')
                 return None
             return func(*args, **kwargs)
@@ -43,6 +47,7 @@ def confirm_action(action_name: str) -> Callable[..., Any]:
 
 
 def log_time(func: Callable[..., Any]) -> Callable[..., Any]:
+
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         start_time = time.monotonic()

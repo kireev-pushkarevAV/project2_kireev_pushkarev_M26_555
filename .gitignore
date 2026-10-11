@@ -1,9 +1,12 @@
 .venv/
 dist/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 *.egg-info/
-*.cast
-asciinema.exe
+.ruff_cache/
+.pytest_cache/
 db_meta.json
 data/
+*.cast
+asciinema.exe

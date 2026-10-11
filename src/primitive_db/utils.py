@@ -1,10 +1,7 @@
-
 import json
-from pathlib import Path
 from typing import Any
 
-DATA_DIR = Path("data")
-META_FILE = Path("db_meta.json")
+from primitive_db.constants import DATA_DIR, META_FILE
 
 
 def load_metadata() -> dict[str, Any]:

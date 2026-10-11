@@ -1,5 +1,10 @@
 from typing import Any
 
+from primitive_db.constants import (
+    ID_COLUMN_NAME,
+    ID_COLUMN_TYPE,
+    VALID_TYPES,
+)
 from primitive_db.decorators import (
     confirm_action,
     handle_db_errors,
@@ -7,17 +12,18 @@ from primitive_db.decorators import (
 )
 from primitive_db.utils import delete_table_data
 
-VALID_TYPES = {"int", "str", "bool"}
-
 
 @handle_db_errors
 def create_table(
     metadata: dict[str, Any], table_name: str, columns: list[str]
 ) -> tuple[bool, str]:
+    """Создает новую таблицу с заданной схемой."""
     if table_name in metadata:
         raise ValueError(f'Таблица "{table_name}" уже существует.')
 
-    schema: list[dict[str, str]] = [{"name": "ID", "type": "int"}]
+    schema: list[dict[str, str]] = [
+        {"name": ID_COLUMN_NAME, "type": ID_COLUMN_TYPE}
+    ]
 
     for col in columns:
         if ":" not in col:
@@ -37,6 +43,7 @@ def create_table(
 @handle_db_errors
 @confirm_action("удаление таблицы")
 def drop_table(metadata: dict[str, Any], table_name: str) -> tuple[bool, str]:
+    """Удаляет таблицу и связанные данные."""
     if table_name not in metadata:
         raise KeyError(table_name)
     del metadata[table_name]
@@ -63,7 +70,7 @@ def insert(
         raise KeyError(table_name)
 
     schema = metadata[table_name]
-    user_columns = [col for col in schema if col["name"] != "ID"]
+    user_columns = [col for col in schema if col["name"] != ID_COLUMN_NAME]
 
     if len(values) != len(user_columns):
         raise ValueError(
@@ -71,8 +78,8 @@ def insert(
         )
 
     new_row: dict[str, Any] = {}
-    next_id = max([row["ID"] for row in table_data], default=0) + 1
-    new_row["ID"] = next_id
+    next_id = max([row[ID_COLUMN_NAME] for row in table_data], default=0) + 1
+    new_row[ID_COLUMN_NAME] = next_id
 
     type_mapping = {"int": int, "str": str, "bool": bool}
 
@@ -117,8 +124,14 @@ def delete(
     where_clause: tuple[str, Any],
 ) -> tuple[list[dict[str, Any]], list[int]]:
     w_col, w_val = where_clause
-    deleted_ids = [row["ID"] for row in table_data if row.get(w_col) == w_val]
-    remaining = [row for row in table_data if row.get(w_col) != w_val]
+    deleted_ids = [
+        row[ID_COLUMN_NAME]
+        for row in table_data
+        if row.get(w_col) == w_val
+    ]
+    remaining = [
+        row for row in table_data if row.get(w_col) != w_val
+    ]
     return remaining, deleted_ids
 
 
@@ -135,6 +148,6 @@ def update(
     for row in table_data:
         if row.get(w_col) == w_val:
             row[s_col] = s_val
-            updated_ids.append(row["ID"])
+            updated_ids.append(row[ID_COLUMN_NAME])
 
     return len(updated_ids), updated_ids
