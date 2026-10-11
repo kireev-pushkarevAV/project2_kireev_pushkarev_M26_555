@@ -11,12 +11,13 @@ def print_help() -> None:
     print("\n***Процесс работы с таблицей***")
     print("Функции:")
     print(
-        "<command> create_table <имя_таблицы> <столбец1:тип> .. - создать таблицу"
+        "<command> create_table <имя_таблицы> <столбец1:тип> "
+        "<столбец2:тип> .. - создать таблицу"
     )
     print("<command> list_tables - показать список всех таблиц")
     print("<command> drop_table <имя_таблицы> - удалить таблицу")
-    print("- <command> exit — выход из программы")
-    print("- <command> help — справочная информация\n")
+    print("<command> exit - выход из программы")
+    print("<command> help - справочная информация\n")
 
 
 def run() -> None:
