@@ -1,84 +1,60 @@
 # Primitive DB
+Простая реляционная база данных с интерфейсом командной строки (CLI), поддержкой хранения
+данных в формате JSON, CRUD-операциями, расширенной обработкой ошибок через декораторы и
+замыканием для кэширования запросов.
+## Возможности
+- **Управление структурой данных**: создание таблиц с типизацией столбцов (int, str, bool),
+автогенерация первичного ключа ID:int, просмотр списка таблиц и удаление.
+- **CRUD-операции**: создание (insert), чтение с фильтрацией (select / where), обновление
+(update) и удаление (delete) записей.
+- **Табличный формат вывода**: структурированное отображение результатов запросов через
+PrettyTable.
+- **Декораторы и безопасность**:
+- @handle_db_errors: централизованная обработка исключений (KeyError, ValueError,
+FileNotFoundError).
+- @confirm_action: интерактивный запрос подтверждения перед выполнением опасных операций
+(drop_table, delete).
+- @log_time: замер времени выполнения дисковых операций.
+- **Замыкания (Closures)**:
+- create_cacher: кэширование одинаковых запросов на чтение (select).
+## Установка и запуск
+### Установка зависимостей:
+make install
+# или: uv sync
+### Запуск базы данных:
+make run
 
-## Управление таблицами
-
-Модуль для управления структурой базы данных. Метаданные хранятся в `db_meta.json`.
-
-### Команды:
-- `create_table <имя_таблицы> <столбец1:тип> ...` — создать таблицу (типы: `int`, `str`, `bool`; первичный ключ `ID:int` добавляется автоматически).
-- `list_tables` — показать список всех таблиц.
-- `drop_table <имя_таблицы>` — удалить таблицу.
-- `help` — справочная информация.
-- `exit` — выход из программы.
-
-### Пример использования:
-```bash
+# или: uv run database
+### Проверка стиля (линтер):
+make lint
+# или: uv run ruff check .
+## Доступные команды
+### Управление структурой
+- create_table &lt;имя_таблицы&gt; &lt;столбец1:тип&gt; ... — создать новую таблицу (типы: int, str,
+bool). Поле ID:int создается автоматически.
+- list_tables — показать список всех существующих таблиц.
+- drop_table &lt;имя_таблицы&gt; — удалить таблицу и связанные данные (требует подтверждения).
+### Операции с данными (CRUD)
+- insert into &lt;имя_таблицы&gt; values (&lt;значение1&gt;, ...) — добавить новую запись.
+- select from &lt;имя_таблицы&gt; — прочитать все записи таблицы.
+- select from &lt;имя_таблицы&gt; where &lt;столбец&gt; = &lt;значение&gt; — прочитать записи по условию.
+- update &lt;имя_таблицы&gt; set &lt;столбец&gt; = &lt;новое_значение&gt; where &lt;условие&gt; — обновить
+существующую запись.
+- delete from &lt;имя_таблицы&gt; where &lt;столбец&gt; = &lt;значение&gt; — удалить запись по условию
+(требует подтверждения).
+- info &lt;имя_таблицы&gt; — вывести информацию о таблице, схеме столбцов и количестве строк.
+### Служебные команды
+- help — вывод справочной информации.
+- exit — выход из интерактивной сессии базы данных.
+## Пример работы
 database
 create_table users name:str age:int is_active:bool
-list_tables
-drop_table users
-exit
-```
-### Демонстрация работы
-
-[![asciicast](https://asciinema.org/a/EEjnzgAIdLhoyOyG.svg)](https://asciinema.org/a/EEjnzgAIdLhoyOyG)
-
-## CRUD-операции
-
-Модуль для работы с данными внутри таблиц. Данные сохраняются в директорию `data/` в формате JSON.
-[![asciicast](https://asciinema.org/connect/4d20ecc5-ee49-4ef5-9b43-de1bc6d13dc9)](https://asciinema.org/connect/4d20ecc5-ee49-4ef5-9b43-de1bc6d13dc9)
-### Команды:
-- `insert into <имя_таблицы> values (<значение1>, <значение2>, ...)` — создать запись.
-- `select from <имя_таблицы> where <столбец> = <значение>` — прочитать записи по условию.
-- `select from <имя_таблицы>` — прочитать все записи.
-- `update <имя_таблицы> set <столбец1> = <новое_значение1> where <столбец_условия> = <значение_условия>` — обновить запись.
-- `delete from <имя_таблицы> where <столбец> = <значение>` — удалить запись.
-- `info <имя_таблицы>` — вывести информацию о таблице.
-- `exit` — выход из программы.
-- `help` — справочная информация.
-
-### Пример использования:
-```bash
-database
-create_table users name:str age:int is_active:bool
-insert into users values ("Sergei", 28, true)
+insert into users values (&quot;Sergei&quot;, 28, true)
 select from users where age = 28
-update users set age = 29 where name = "Sergei"
+update users set age = 29 where name = &quot;Sergei&quot;
 delete from users where ID = 1
 info users
-exit
-```
-
-### Декораторы и безопасность
-### Демонстрация работы
-
-[![asciicast](https://asciinema.org/connect/324177a2-65bb-4a78-96ef-ec5894240d53)](https://asciinema.org/connect/324177a2-65bb-4a78-96ef-ec5894240d53)
-
-  - Централизованная обработка ошибок (`@handle_db_errors`).
-  - Подтверждение опасных действий (`@confirm_action`).
-  - Замер времени выполнения дисковых операций (`@log_time`).
-  - Замыкание для кэширования одинаковых запросов на чтение (`create_cacher`).
-
-  ## Команды
-
-- `create_table <имя_таблицы> <столбец1:тип> ...` — создать таблицу.
-- `list_tables` — показать список таблиц.
-- `drop_table <имя_таблицы>` — удалить таблицу (с подтверждением).
-- `insert into <имя_таблицы> values (<значение1>, ...)` — добавить запись.
-- `select from <имя_таблицы> [where <столбец> = <значение>]` — прочитать данные.
-- `update <имя_таблицы> set <столбец> = <новое_значение> where <условие>` — обновить данные.
-- `delete from <имя_таблицы> where <условие>` — удалить запись (с подтверждением).
-- `info <имя_таблицы>` — сводная информация о таблице.
-- `help` — справочная информация.
-- `exit` — выход из базы данных.
-
-## Пример работы
-
-```bash
-database
-create_table users name:str age:int is_active:bool
-insert into users values ("Sergei", 28, true)
-select from users where age = 28
-delete from users where ID = 1
 drop_table users
-exit```
+exit
+## Демонстрация работы
+[![asciicast](https://asciinema.org/a/CV4EpAFv4UYsnsOL.svg)](https://asciinema.org/a/CV4EpAFv4UYsnsOL)
