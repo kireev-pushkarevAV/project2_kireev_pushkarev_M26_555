@@ -11,6 +11,7 @@ from primitive_db.core import (
     select,
     update,
 )
+from primitive_db.decorators import create_cacher
 from primitive_db.parser import parse_condition, parse_values_clause
 from primitive_db.utils import (
     load_metadata,
@@ -21,7 +22,6 @@ from primitive_db.utils import (
 
 
 def print_help() -> None:
-    
     print("\n***Операции с данными***\n")
     print("Функции:")
     print(
@@ -49,7 +49,6 @@ def print_help() -> None:
 def display_table(
     schema: list[dict[str, str]], rows: list[dict[str, str]]
 ) -> None:
-
     field_names = [col["name"] for col in schema]
     pt = PrettyTable()
     pt.field_names = field_names
@@ -59,8 +58,8 @@ def display_table(
 
 
 def run() -> None:
-
     metadata = load_metadata()
+    cacher, clear_cache = create_cacher()
     print_help()
 
     while True:
@@ -79,7 +78,6 @@ def run() -> None:
             print_help()
             continue
 
-       
         if user_input.startswith("create_table "):
             parts = user_input.split()
             if len(parts) < 3:
@@ -87,14 +85,16 @@ def run() -> None:
                 continue
             t_name = parts[1]
             cols = parts[2:]
-            ok, msg = create_table(metadata, t_name, cols)
-            if ok:
+            res = create_table(metadata, t_name, cols)
+            if res:
                 save_metadata(metadata)
-            print(msg)
+                print(res[1])
             continue
 
         if user_input == "list_tables":
-            print(list_tables(metadata))
+            res = list_tables(metadata)
+            if res:
+                print(res)
             continue
 
         if user_input.startswith("drop_table "):
@@ -102,13 +102,13 @@ def run() -> None:
             if len(parts) < 2:
                 print("Ошибка: укажите имя таблицы.")
                 continue
-            ok, msg = drop_table(metadata, parts[1])
-            if ok:
+            res = drop_table(metadata, parts[1])
+            if res:
                 save_metadata(metadata)
-            print(msg)
+                clear_cache()
+                print(res[1])
             continue
 
-        
         if user_input.startswith("info "):
             t_name = user_input.split(maxsplit=1)[1].strip()
             if t_name not in metadata:
@@ -122,7 +122,6 @@ def run() -> None:
             print(f"Количество записей: {len(data)}")
             continue
 
-        
         insert_match = re.match(
             r"^insert\s+into\s+(\w+)\s+values\s*(\(.*\))$",
             user_input,
@@ -133,13 +132,13 @@ def run() -> None:
             raw_vals = insert_match.group(2)
             vals = parse_values_clause(raw_vals)
             t_data = load_table_data(t_name)
-            ok, msg, _ = insert(metadata, t_name, vals, t_data)
-            if ok:
+            res = insert(metadata, t_name, vals, t_data)
+            if res and res[0]:
                 save_table_data(t_name, t_data)
-            print(msg)
+                clear_cache()
+                print(res[1])
             continue
 
-        
         select_match = re.match(
             r"^select\s+from\s+(\w+)(?:\s+where\s+(.+))?$",
             user_input,
@@ -159,11 +158,16 @@ def run() -> None:
                 except ValueError as err:
                     print(err)
                     continue
-            filtered = select(t_data, where_clause)
-            display_table(metadata[t_name], filtered)
+
+            cache_key = f"{t_name}:{where_raw}"
+            filtered = cacher(
+                cache_key,
+                lambda: select(t_data, where_clause),
+            )
+            if filtered is not None:
+                display_table(metadata[t_name], filtered)
             continue
 
-       
         update_match = re.match(
             r"^update\s+(\w+)\s+set\s+(.+?)\s+where\s+(.+)$",
             user_input,
@@ -183,18 +187,20 @@ def run() -> None:
                 print(err)
                 continue
             t_data = load_table_data(t_name)
-            count, ids = update(t_data, set_clause, where_clause)
-            if count > 0:
-                save_table_data(t_name, t_data)
-                ids_str = ", ".join(str(i) for i in ids)
-                print(
-                    f'Запись с ID={ids_str} в таблице "{t_name}" '
-                    "успешно обновлена."
-                )
-            else:
-                print("Записи для обновления не найдены.")
+            res = update(t_data, set_clause, where_clause)
+            if res:
+                count, ids = res
+                if count > 0:
+                    save_table_data(t_name, t_data)
+                    clear_cache()
+                    ids_str = ", ".join(str(i) for i in ids)
+                    print(
+                        f'Запись с ID={ids_str} в таблице "{t_name}" '
+                        "успешно обновлена."
+                    )
+                else:
+                    print("Записи для обновления не найдены.")
             continue
-
 
         del_match = re.match(
             r"^delete\s+from\s+(\w+)\s+where\s+(.+)$",
@@ -213,15 +219,19 @@ def run() -> None:
                 print(err)
                 continue
             t_data = load_table_data(t_name)
-            new_data, del_ids = delete(t_data, where_clause)
-            if del_ids:
-                save_table_data(t_name, new_data)
-                ids_str = ", ".join(str(i) for i in del_ids)
-                print(
-                    f'Запись с ID={ids_str} успешно удалена из таблицы "{t_name}".'
-                )
-            else:
-                print("Записи для удаления не найдены.")
+            res = delete(t_data, where_clause)
+            if res:
+                new_data, del_ids = res
+                if del_ids:
+                    save_table_data(t_name, new_data)
+                    clear_cache()
+                    ids_str = ", ".join(str(i) for i in del_ids)
+                    print(
+                        f'Запись с ID={ids_str} успешно удалена '
+                        f'из таблицы "{t_name}".'
+                    )
+                else:
+                    print("Записи для удаления не найдены.")
             continue
 
         print(f"Неизвестная команда: {user_input}")
